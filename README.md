@@ -17,7 +17,8 @@ Please read this section before using the project:
 - You bring and manage your **own Gemini CLI credentials**
 - You are responsible for **usage, billing, and compliance**
 - This repository is **source code only** (not hosted, not commercial)
-- Provided **as-is**, with no dedicated support or roadmap commitments
+- Provided as-is, with no dedicated support or roadmap commitments. 
+  If you find ways to improve it, feel free to share them.
 
 ---
 
