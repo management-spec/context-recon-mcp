@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PYTHON_BIN="${PROJECT_ROOT}/.venv/bin/python"
+CALLER_CWD="${PWD}"
+
+if [[ ! -x "${PYTHON_BIN}" ]]; then
+  echo "Context_Recon_MCP error: missing venv python at ${PYTHON_BIN}" >&2
+  echo "Run: /opt/homebrew/bin/python3.13 -m venv ${PROJECT_ROOT}/.venv && ${PROJECT_ROOT}/.venv/bin/pip install -e '${PROJECT_ROOT}[dev]'" >&2
+  exit 1
+fi
+
+# Target workspace defaults to the invoking client's cwd (project root).
+export GEMINI_CONTEXT_WORKSPACE_ROOT="${GEMINI_CONTEXT_WORKSPACE_ROOT:-${CALLER_CWD}}"
+# Server home is where config.yaml and source live.
+export GEMINI_CONTEXT_SERVER_HOME="${PROJECT_ROOT}"
+
+cd "${PROJECT_ROOT}"
+exec "${PYTHON_BIN}" "${PROJECT_ROOT}/src/server.py"

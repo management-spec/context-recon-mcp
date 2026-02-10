@@ -1,0 +1,11 @@
+{
+  "Context_Recon_MCP": {
+    "command": "context-recon-mcp",
+    "args": [],
+    "env": {
+      "GEMINI_DEFAULT_AUTH_TYPE": "oauth-personal",
+      "NO_BROWSER": "true",
+      "OAUTH_CALLBACK_HOST": "127.0.0.1"
+    }
+  }
+}

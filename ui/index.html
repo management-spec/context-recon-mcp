@@ -1,0 +1,1524 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Context Recon Dashboard</title>
+  <style>
+    :root {
+      --bg: #121212;
+      --panel: #181818;
+      --panel-soft: #1f1f1f;
+      --line: #2a2a2a;
+      --ink: #f4f4f4;
+      --muted: #9ba3ac;
+      --accent: #32cd32;
+      --warn: #ffbf3f;
+      --bad: #ff667a;
+      --blue: #4da3ff;
+      --shadow: rgba(0, 0, 0, 0.36);
+      --chip: #222a22;
+    }
+    :root.theme-light {
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --panel-soft: #f4f7fc;
+      --line: #d8dfeb;
+      --ink: #171b22;
+      --muted: #5c6573;
+      --accent: #0e8a0e;
+      --warn: #b66a00;
+      --bad: #b4233d;
+      --blue: #145acc;
+      --shadow: rgba(20, 30, 42, 0.1);
+      --chip: #edf6ed;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 90% -20%, #243b1f 0%, var(--bg) 52%);
+      color: var(--ink);
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+    }
+    .app {
+      max-width: 1680px;
+      margin: 0 auto;
+      padding: 12px;
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .topbar h1 {
+      font-size: 20px;
+      margin: 0;
+      letter-spacing: 0.02em;
+    }
+    .subhead {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+    }
+    .control-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      border: 1px solid var(--line);
+      background: var(--panel-soft);
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: border-color 0.14s ease, transform 0.08s ease, box-shadow 0.14s ease;
+    }
+    .btn:hover { border-color: var(--accent); }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.5; cursor: default; }
+    .btn.busy {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 1px rgba(77, 163, 255, 0.2);
+      cursor: progress;
+    }
+    .ui-feedback {
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 11px;
+      margin-left: 6px;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+    }
+    .ui-feedback.ok { color: var(--accent); }
+    .ui-feedback.error { color: var(--bad); }
+    .ui-feedback.pending { color: var(--blue); }
+    .toast {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      z-index: 10000;
+      max-width: min(72vw, 480px);
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--panel-soft);
+      color: var(--ink);
+      padding: 8px 10px;
+      box-shadow: 0 10px 24px var(--shadow);
+      font-size: 12px;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+      opacity: 0;
+      transform: translateY(6px);
+      pointer-events: none;
+      transition: opacity 0.14s ease, transform 0.14s ease;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .toast.ok {
+      border-color: rgba(50, 205, 50, 0.6);
+    }
+    .toast.error {
+      border-color: rgba(255, 102, 122, 0.7);
+    }
+    .toast.pending {
+      border-color: rgba(77, 163, 255, 0.6);
+    }
+    .chip {
+      display: inline-block;
+      border: 1px solid var(--line);
+      background: var(--chip);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 11px;
+      margin-right: 6px;
+      margin-bottom: 4px;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(180px, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .kpi {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      box-shadow: 0 10px 24px var(--shadow);
+    }
+    .kpi .label {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+    }
+    .kpi .value {
+      font-size: 24px;
+      font-weight: 650;
+      line-height: 1.1;
+    }
+    .status-ok { color: var(--accent); }
+    .status-bad { color: var(--bad); }
+    .detail {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 310px 1fr 360px;
+      gap: 10px;
+      align-items: start;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      box-shadow: 0 10px 24px var(--shadow);
+      min-height: 80px;
+      overflow: hidden;
+    }
+    .panel-title {
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+    }
+    .stack { display: grid; gap: 10px; }
+    .mono { font-family: "IBM Plex Mono", "JetBrains Mono", monospace; }
+    .fleet-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 610px;
+      overflow: auto;
+    }
+    .fleet-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      padding: 4px 6px;
+      border-radius: 6px;
+      font-size: 12px;
+      border: 1px solid transparent;
+      transition: background 0.18s ease;
+      animation: fade-in 0.25s ease;
+      overflow: hidden;
+    }
+    .fleet-item.file { color: #b9c3d1; }
+    .fleet-item.dir { color: #dbe2ec; }
+    .fleet-item:hover { border-color: var(--line); background: var(--panel-soft); }
+    .fleet-item.hot {
+      box-shadow: inset 0 0 0 1px rgba(50, 205, 50, 0.25);
+      animation: pulse-hot 1.2s ease-in-out infinite;
+    }
+    .fleet-item.muted { opacity: 0.45; }
+    .fleet-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+    .fleet-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 220px;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+    }
+    .muter {
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--muted);
+      border-radius: 6px;
+      font-size: 10px;
+      padding: 2px 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+    .muter.active { color: var(--accent); border-color: var(--accent); }
+    .scan-overlay {
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      margin: 0 -10px 8px;
+      opacity: 0;
+    }
+    .scan-overlay.active { animation: scanning 1s linear infinite; opacity: 1; }
+    .recon-console {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: var(--panel-soft);
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+    }
+    .options {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .feed-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 220px;
+      overflow: auto;
+      display: grid;
+      gap: 6px;
+    }
+    .feed-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 7px;
+      font-size: 12px;
+      animation: fade-in 0.2s ease;
+    }
+    .feed-item.ok { border-left: 3px solid var(--accent); }
+    .feed-item.error { border-left: 3px solid var(--bad); }
+    .feed-meta {
+      font-size: 10px;
+      color: var(--muted);
+      margin-bottom: 4px;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+    }
+    .snippet-list { display: grid; gap: 8px; }
+    .snippet {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.01);
+      transition: border-color 0.18s ease, transform 0.18s ease;
+    }
+    .snippet.selected { border-color: var(--accent); transform: translateY(-1px); }
+    .snippet-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+    }
+    .rationale {
+      border: 1px solid rgba(77, 163, 255, 0.28);
+      background: rgba(77, 163, 255, 0.08);
+      color: #c4ddff;
+      padding: 6px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+    .code {
+      background: #0f1115;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 6px;
+      max-height: 300px;
+      overflow: auto;
+      font-size: 12px;
+      line-height: 1.35;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+    }
+    .code-line {
+      display: grid;
+      grid-template-columns: 62px 1fr;
+      gap: 8px;
+      align-items: baseline;
+      white-space: pre;
+    }
+    .ln {
+      color: #7d8593;
+      text-align: right;
+      border-right: 1px solid #2a313e;
+      padding-right: 7px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .ln:hover { color: var(--accent); }
+    .snippet-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .scratch-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 6px;
+      max-height: 170px;
+      overflow: auto;
+    }
+    .scratch-item {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px;
+      font-size: 11px;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+    }
+    .budget-wrap {
+      display: grid;
+      gap: 8px;
+    }
+    .budget-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+      color: var(--ink);
+    }
+    .budget-bar {
+      height: 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      overflow: hidden;
+      background: var(--panel-soft);
+    }
+    .budget-fill {
+      width: 0%;
+      height: 100%;
+      background: var(--accent);
+      transition: width 0.2s ease, background 0.2s ease;
+    }
+    .progress {
+      height: 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      overflow: hidden;
+      display: flex;
+      margin-top: 6px;
+    }
+    .seg-indexed { background: var(--accent); }
+    .seg-ignored { background: var(--warn); }
+    .seg-unknown { background: #4a5568; }
+    .mini-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+    }
+    .mini-table td, .mini-table th {
+      border-bottom: 1px solid var(--line);
+      padding: 5px 4px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .breadcrumb {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .crumb {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 2px 6px;
+      cursor: pointer;
+      background: var(--panel-soft);
+    }
+    .inspector {
+      background: #0f1115;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 7px;
+      font-size: 12px;
+      max-height: 260px;
+      overflow: auto;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+      white-space: pre-wrap;
+    }
+    details summary {
+      cursor: pointer;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 6px;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+    }
+    details pre {
+      max-height: 220px;
+      overflow: auto;
+      font-size: 11px;
+      background: #0f1115;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 7px;
+      color: #d5dce8;
+      font-family: "IBM Plex Mono", "JetBrains Mono", monospace;
+    }
+    @keyframes pulse-hot {
+      0%, 100% { box-shadow: inset 0 0 0 1px rgba(50, 205, 50, 0.2); }
+      50% { box-shadow: inset 0 0 0 1px rgba(50, 205, 50, 0.58); }
+    }
+    @keyframes scanning {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(2px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 1320px) {
+      .kpi-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+      .layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div>
+        <h1>Context_Recon_MCP Dashboard</h1>
+        <p class="subhead">
+          Workspace: <span id="workspace-root">...</span> |
+          Active Context: <span id="active-context">none</span>
+        </p>
+      </div>
+      <div class="control-row">
+        <button id="theme-toggle" class="btn" type="button">Light Mode</button>
+        <button id="refresh-status-btn" class="btn" type="button">Refresh Usage</button>
+        <button id="reindex-btn" class="btn" type="button">Re-index Now</button>
+        <span id="ui-feedback" class="ui-feedback" aria-live="polite">Ready.</span>
+      </div>
+    </header>
+
+    <section class="kpi-grid">
+      <article class="kpi">
+        <div class="label">Gemini Connection</div>
+        <div id="kpi-connected" class="value">...</div>
+        <div id="kpi-guidance" class="detail"></div>
+      </article>
+      <article class="kpi">
+        <div class="label">Indexed Files</div>
+        <div id="kpi-indexed" class="value">0</div>
+        <div id="kpi-ignored" class="detail"></div>
+      </article>
+      <article class="kpi">
+        <div class="label">Token Usage</div>
+        <div id="kpi-tokens" class="value">0</div>
+        <div id="kpi-token-breakdown" class="detail"></div>
+      </article>
+      <article class="kpi">
+        <div class="label">Rerank Requests</div>
+        <div id="kpi-requests" class="value">0</div>
+        <div id="kpi-success" class="detail"></div>
+      </article>
+    </section>
+
+    <section class="layout">
+      <aside class="stack">
+        <section class="panel">
+          <p class="panel-title">Coverage</p>
+          <div id="coverage-graph" class="progress">
+            <div class="seg-indexed" style="width:0%"></div>
+            <div class="seg-ignored" style="width:0%"></div>
+            <div class="seg-unknown" style="width:100%"></div>
+          </div>
+          <div id="coverage-label" class="detail"></div>
+        </section>
+        <section class="panel">
+          <p class="panel-title">File Explorer</p>
+          <div id="scan-overlay" class="scan-overlay"></div>
+          <div id="muted-chips"></div>
+          <ul id="fleet-tree" class="fleet-list"></ul>
+        </section>
+      </aside>
+
+      <main class="stack">
+        <section class="panel">
+          <p class="panel-title">Query Console (Cmd/Ctrl+K)</p>
+          <form id="recon-form">
+            <div class="recon-console">
+              <input id="recon-query" placeholder="Ask a context question..." required>
+              <input id="recon-scope" placeholder="scope paths">
+              <button id="recon-run" class="btn" type="submit">Run Query</button>
+            </div>
+            <div class="options">
+              <span class="mono">max_results</span>
+              <input id="recon-max" type="number" min="1" max="20" value="5" style="width:72px;">
+              <label><input id="recon-tests" type="checkbox"> include_tests</label>
+              <span id="recon-meta" class="mono"></span>
+            </div>
+            <div id="top-query-chips"></div>
+          </form>
+        </section>
+
+        <section class="panel">
+          <p class="panel-title">Activity Feed</p>
+          <ul id="event-feed" class="feed-list"></ul>
+        </section>
+
+        <section class="panel">
+          <p class="panel-title">Query Results</p>
+          <div id="snippet-list" class="snippet-list"></div>
+        </section>
+      </main>
+
+      <aside class="stack">
+        <section class="panel">
+          <p class="panel-title">Context Budget Meter (Snippets)</p>
+          <div class="budget-wrap">
+            <div class="budget-head">
+              <span id="token-bar-text">0.0% used</span>
+            </div>
+            <div id="token-bar" class="budget-bar">
+              <div id="token-bar-fill" class="budget-fill"></div>
+            </div>
+            <div class="detail mono" id="token-gauge-detail"></div>
+          </div>
+          <div class="detail mono" id="efficiency-label"></div>
+        </section>
+
+        <section class="panel">
+          <p class="panel-title">Scratchpad (Pinned Snippets)</p>
+          <ul id="scratchpad-list" class="scratch-list"></ul>
+        </section>
+
+        <section class="panel">
+          <p class="panel-title">Inspector</p>
+          <div id="breadcrumb" class="breadcrumb"></div>
+          <div id="inspector-meta" class="detail mono"></div>
+          <pre id="inspector-body" class="inspector"></pre>
+        </section>
+
+        <section class="panel">
+          <p class="panel-title">Relevance Heatmap (Last 5 Queries)</p>
+          <table class="mini-table" id="heatmap-table"></table>
+        </section>
+
+        <section class="panel">
+          <p class="panel-title">Topology (Co-retrieval)</p>
+          <table class="mini-table" id="topology-table"></table>
+          <details>
+            <summary>Raw Status</summary>
+            <pre id="raw-status"></pre>
+          </details>
+        </section>
+      </aside>
+    </section>
+  </div>
+  <div id="ui-toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const EXPLORER_REFRESH_MS = 120000;
+    const EVENTS_FALLBACK_MS = 5000;
+    const MAX_FLEET_ROWS = 1200;
+    const state = {
+      events: [],
+      snippets: [],
+      selectedSnippet: -1,
+      scratchpad: [],
+      explorer: null,
+      status: null,
+      lastEventId: 0,
+      eventSource: null,
+      activeInspectPath: "",
+      explorerIntervalId: null,
+      eventFallbackIntervalId: null
+    };
+    let toastTimer = null;
+
+    function setUiFeedback(message, kind = "") {
+      const el = document.getElementById("ui-feedback");
+      if (!el) {
+        return;
+      }
+      el.className = `ui-feedback ${kind}`.trim();
+      el.textContent = message;
+    }
+
+    function showToast(message, kind = "ok", timeoutMs = 1400) {
+      const toast = document.getElementById("ui-toast");
+      if (!toast) {
+        return;
+      }
+      toast.className = `toast ${kind} show`;
+      toast.textContent = String(message || "");
+      if (toastTimer) {
+        clearTimeout(toastTimer);
+      }
+      toastTimer = setTimeout(() => {
+        toast.classList.remove("show");
+      }, Math.max(500, timeoutMs));
+    }
+
+    async function runWithButtonFeedback(button, busyText, action, { successText = "Done.", errorPrefix = "Action failed" } = {}) {
+      const previous = button ? button.textContent : "";
+      if (button) {
+        button.disabled = true;
+        button.classList.add("busy");
+        button.textContent = busyText;
+      }
+      setUiFeedback(busyText, "pending");
+      showToast(busyText, "pending", 800);
+      try {
+        const result = await action();
+        setUiFeedback(successText, "ok");
+        showToast(successText, "ok");
+        return result;
+      } catch (err) {
+        const message = `${errorPrefix}: ${String(err)}`;
+        setUiFeedback(message, "error");
+        showToast(message, "error", 2600);
+        throw err;
+      } finally {
+        if (button) {
+          setTimeout(() => {
+            button.disabled = false;
+            button.classList.remove("busy");
+            button.textContent = previous;
+          }, 120);
+        }
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    function parseScope(raw) {
+      return raw.split(",").map((part) => part.trim()).filter(Boolean);
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    function pickQuotaModel(models, keywords) {
+      if (!Array.isArray(models)) {
+        return null;
+      }
+      const lowered = keywords.map((item) => item.toLowerCase());
+      for (const model of models) {
+        const id = String(model.model_id || "").toLowerCase();
+        const ok = lowered.every((key) => id.includes(key));
+        if (ok) {
+          return model;
+        }
+      }
+      return null;
+    }
+
+    function modelById(models, modelId) {
+      if (!Array.isArray(models) || !modelId) {
+        return null;
+      }
+      const target = String(modelId).toLowerCase();
+      for (const model of models) {
+        if (String(model.model_id || "").toLowerCase() === target) {
+          return model;
+        }
+      }
+      return null;
+    }
+
+    async function apiGet(path) {
+      const response = await fetch(path);
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.message || payload.error || "request failed");
+      }
+      return payload;
+    }
+
+    async function apiPost(path, payload) {
+      const response = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload || {})
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || data.error || "request failed");
+      }
+      return data;
+    }
+
+    function applyTheme(theme) {
+      const isLight = theme === "light";
+      document.documentElement.classList.toggle("theme-light", isLight);
+      document.getElementById("theme-toggle").textContent = isLight ? "Dark Mode" : "Light Mode";
+      localStorage.setItem("context_recon_theme", isLight ? "light" : "dark");
+    }
+
+    function renderKpis(data) {
+      const gemini = data.gemini || {};
+      const usage = gemini.usage || {};
+      const quota = gemini.quota || {};
+      const cliStats = gemini.cli_stats || {};
+      const index = data.index || {};
+      const connected = !!gemini.connected;
+      const monitorAvailable = Boolean(quota.available || cliStats.available);
+      const connectedEl = document.getElementById("kpi-connected");
+      if (connected) {
+        connectedEl.textContent = "Connected";
+        connectedEl.className = "value status-ok";
+        document.getElementById("kpi-guidance").textContent = gemini.guidance || "Gemini CLI connected.";
+      } else if (monitorAvailable) {
+        const source = cliStats.available ? "/stats" : "oauth-api";
+        connectedEl.textContent = "Auth Ready";
+        connectedEl.className = "value status-ok";
+        document.getElementById("kpi-guidance").textContent = `Gemini monitor connected (${source}). Run Query to validate reranker connection.`;
+      } else {
+        connectedEl.textContent = "Disconnected";
+        connectedEl.className = "value status-bad";
+        document.getElementById("kpi-guidance").textContent = gemini.guidance || "";
+      }
+      document.getElementById("kpi-indexed").textContent = String(index.files_indexed || 0);
+      document.getElementById("kpi-ignored").textContent = "Ignored: " + String(index.files_ignored || 0);
+      document.getElementById("kpi-tokens").textContent = String(usage.gemini_total_tokens || 0);
+      document.getElementById("kpi-token-breakdown").textContent = [
+        "Prompt=" + String(usage.gemini_prompt_tokens || 0),
+        "Output=" + String(usage.gemini_output_tokens || 0),
+        "Cached=" + String(usage.gemini_cached_tokens || 0),
+        "Tool=" + String(usage.gemini_tool_tokens || 0)
+      ].join(" | ");
+      document.getElementById("kpi-requests").textContent = String(usage.requests_total || 0);
+      document.getElementById("kpi-success").textContent = [
+        "CLI success=" + String(usage.cli_success_total || 0),
+        "fallback=" + String(usage.fallback_total || 0)
+      ].join(" | ");
+      document.getElementById("workspace-root").textContent = data.workspace_root || "...";
+      document.getElementById("active-context").textContent = data.active_context || "none";
+      document.getElementById("raw-status").textContent = JSON.stringify(data, null, 2);
+    }
+
+    function flattenTree(nodes, depth = 0, rows = [], maxRows = MAX_FLEET_ROWS, state = { truncated: false }) {
+      for (const node of nodes || []) {
+        if (rows.length >= maxRows) {
+          state.truncated = true;
+          return rows;
+        }
+        rows.push({ node, depth });
+        if (node.children && node.children.length) {
+          flattenTree(node.children, depth + 1, rows, maxRows, state);
+        }
+      }
+      return rows;
+    }
+
+    function renderFleet(explorer) {
+      if (!explorer) {
+        return;
+      }
+      const tree = document.getElementById("fleet-tree");
+      const chips = document.getElementById("muted-chips");
+      const flattenState = { truncated: false };
+      const sourceRows = flattenTree(explorer.tree || [], 0, [], MAX_FLEET_ROWS * 2, { truncated: false });
+      const rows = sourceRows
+        .filter((row) => {
+          const path = String(row.node.path || "");
+          const parts = path.split("/").filter(Boolean);
+          return !parts.some((part) => part.startsWith("."));
+        })
+        .slice(0, MAX_FLEET_ROWS);
+      if (sourceRows.length > rows.length) {
+        flattenState.truncated = true;
+      }
+      const maxScore = Math.max(0.001, ...rows.map((row) => Number(row.node.relevance || 0)));
+      tree.innerHTML = rows.map(({ node, depth }) => {
+        const indent = depth * 12;
+        const relevance = Number(node.relevance || 0);
+        const alpha = Math.min(0.35, relevance / maxScore);
+        const bg = alpha > 0 ? `background:rgba(50,205,50,${alpha.toFixed(3)});` : "";
+        const mutedClass = node.muted ? "muted" : "";
+        const hotClass = node.hot ? "hot" : "";
+        const kindClass = node.kind === "dir" ? "dir" : "file";
+        const icon = node.kind === "dir" ? "▸" : "•";
+        const canMute = node.kind === "dir" && depth <= 1 && Boolean(node.path);
+        const muter = canMute
+          ? `<button class="muter ${node.muted ? "active" : ""}" data-path="${encodeURIComponent(node.path)}" data-muted="${node.muted ? "1" : "0"}">${node.muted ? "unmute" : "mute"}</button>`
+          : "";
+        return `
+          <li class="fleet-item ${kindClass} ${mutedClass} ${hotClass}" style="padding-left:${indent + 6}px;${bg}">
+            <div class="fleet-left">
+              <span>${icon}</span>
+              <span class="fleet-name" title="${escapeHtml(node.path || node.name)}">${escapeHtml(node.name)}</span>
+            </div>
+            ${muter}
+          </li>
+        `;
+      }).join("");
+      if (flattenState.truncated) {
+        tree.insertAdjacentHTML(
+          "beforeend",
+          `<li class="fleet-item"><div class="detail">Tree truncated at ${MAX_FLEET_ROWS} nodes.</div></li>`
+        );
+      }
+
+      chips.innerHTML = (explorer.muted_prefixes || []).map((path) =>
+        `<span class="chip">${escapeHtml(path)}</span>`
+      ).join("") || '<span class="chip">No muted folders</span>';
+
+      const coverage = explorer.coverage_graph || {};
+      const indexedPct = Number(coverage.indexed_percent || 0);
+      const ignoredPct = Number(coverage.ignored_percent || 0);
+      const unknownPct = Math.max(0, 100 - indexedPct - ignoredPct);
+      document.getElementById("coverage-graph").innerHTML = `
+        <div class="seg-indexed" style="width:${indexedPct}%"></div>
+        <div class="seg-ignored" style="width:${ignoredPct}%"></div>
+        <div class="seg-unknown" style="width:${unknownPct}%"></div>
+      `;
+      document.getElementById("coverage-label").textContent = `indexed=${indexedPct.toFixed(1)}% ignored=${ignoredPct.toFixed(1)}% unknown=${unknownPct.toFixed(1)}%`;
+
+      const heatmapRows = explorer.heatmap || [];
+      document.getElementById("heatmap-table").innerHTML = `
+        <thead><tr><th>Path</th><th>Score</th></tr></thead>
+        <tbody>
+          ${heatmapRows.length
+            ? heatmapRows.map((row) => `<tr><td>${escapeHtml(row.path)}</td><td>${Number(row.score || 0).toFixed(3)}</td></tr>`).join("")
+            : '<tr><td colspan="2" class="detail">No query history yet. Run Query to populate.</td></tr>'}
+        </tbody>
+      `;
+
+      const edges = explorer.topology_edges || [];
+      document.getElementById("topology-table").innerHTML = `
+        <thead><tr><th>A</th><th>B</th><th>W</th></tr></thead>
+        <tbody>
+          ${edges.length
+            ? edges.map((edge) => `<tr><td>${escapeHtml(edge.a)}</td><td>${escapeHtml(edge.b)}</td><td>${edge.weight}</td></tr>`).join("")
+            : '<tr><td colspan="3" class="detail">No co-retrieval edges yet. Run Query to populate.</td></tr>'}
+        </tbody>
+      `;
+
+      const token = explorer.token_budget || {};
+      const current = Number(token.active_context_tokens || 0);
+      const budget = Math.max(1, Number(token.context_window_tokens || 1));
+      let pct = Math.max(0, Math.min(100, (current / budget) * 100));
+      let gaugeDetail = `${current} / ${budget} est. snippet-context tokens (not Gemini account quota)`;
+      if (pct <= 0.001) {
+        const status = state.status || {};
+        const gemini = status.gemini || {};
+        const cliStats = gemini.cli_stats || {};
+        const quota = gemini.quota || {};
+        const sessionModel = String(cliStats.session_model || "").trim();
+        const models = Array.isArray(cliStats.models) ? cliStats.models : [];
+        if (cliStats.available && models.length) {
+          const preferred = modelById(models, sessionModel)
+            || models.find((model) => Number(model.requests || 0) > 0)
+            || models.find((model) => String(model.model_id || "").includes("flash") && !String(model.model_id || "").includes("lite"))
+            || models[0];
+          const left = Number(preferred.percent_left || 0);
+          const used = Math.max(0, Math.min(100, 100 - left));
+          pct = used;
+          gaugeDetail = [
+            "source=/stats",
+            `session=${sessionModel || "unknown"}`,
+            `${preferred.model_id}: ${used.toFixed(1)}% used (${left.toFixed(1)}% left)`
+          ].join(" | ");
+        } else {
+          const quotaModels = Array.isArray(quota.models) ? quota.models : [];
+          const preferred = pickQuotaModel(quotaModels, ["2.5", "flash"])
+            || pickQuotaModel(quotaModels, ["2.0", "flash"])
+            || pickQuotaModel(quotaModels, ["flash"])
+            || null;
+          if (preferred) {
+            const left = Number(preferred.percent_left || 0);
+            const used = Math.max(0, Math.min(100, 100 - left));
+            pct = used;
+            gaugeDetail = `source=oauth-api | ${preferred.model_id}: ${used.toFixed(1)}% used (${left.toFixed(1)}% left)`;
+          } else {
+            gaugeDetail = "No quota/session usage loaded yet. Click Refresh Usage.";
+          }
+        }
+      }
+      const tokenBarFill = document.getElementById("token-bar-fill");
+      const tokenBarText = document.getElementById("token-bar-text");
+      tokenBarFill.style.width = `${pct.toFixed(1)}%`;
+      let barColor = "var(--accent)";
+      if (pct >= 85) {
+        barColor = "var(--bad)";
+      } else if (pct >= 65) {
+        barColor = "var(--warn)";
+      }
+      tokenBarFill.style.background = barColor;
+      tokenBarText.textContent = `${pct.toFixed(1)}% used`;
+      document.getElementById("token-gauge-detail").textContent = gaugeDetail;
+
+      const efficiency = explorer.token_efficiency || {};
+      document.getElementById("efficiency-label").textContent = `efficiency=${efficiency.label || "no_data"} score=${efficiency.score || 0} ratio=${Number(efficiency.ratio || 0).toFixed(2)}`;
+
+      const topQueries = Array.isArray(explorer.top_queries) ? explorer.top_queries : [];
+      const topQueryChips = document.getElementById("top-query-chips");
+      topQueryChips.innerHTML = topQueries.length
+        ? topQueries.slice(0, 8).map((item) => {
+            const q = String(item.query || "");
+            const count = Number(item.count || 0);
+            return `<button type="button" class="chip top-query-chip" data-query="${encodeURIComponent(q)}" title="Used ${count} times">${escapeHtml(q)} (${count})</button>`;
+          }).join("")
+        : '<span class="chip">No query history yet</span>';
+    }
+
+    function renderEvents(events) {
+      const feed = document.getElementById("event-feed");
+      const rows = [...events].slice(-120).reverse();
+      if (!rows.length) {
+        feed.innerHTML = '<li class="feed-item"><div class="detail">No activity yet. Run Query or Re-index.</div></li>';
+        return;
+      }
+      feed.innerHTML = rows.map((event) => `
+        <li class="feed-item ${escapeHtml(event.status || "")}" data-event-id="${Number(event.id || 0)}">
+          <div class="feed-meta">${escapeHtml(event.timestamp || "")} | ${escapeHtml(event.source || "")} | ${escapeHtml(event.tool || "")}</div>
+          <div>${escapeHtml(event.summary || "")}</div>
+        </li>
+      `).join("");
+    }
+
+    function snippetLines(snippet) {
+      const text = String(snippet.excerpt || "");
+      const lines = text.split("\n");
+      const start = Number(snippet.start_line || 1);
+      return lines.map((line, index) => {
+        const ln = start + index;
+        return `<div class="code-line"><span class="ln" data-path="${encodeURIComponent(snippet.path)}" data-line="${ln}">${ln}</span><span>${escapeHtml(line)}</span></div>`;
+      }).join("");
+    }
+
+    function renderSnippets() {
+      const list = document.getElementById("snippet-list");
+      if (!state.snippets.length) {
+        list.innerHTML = '<div class="detail">Run a query to load snippets.</div>';
+        return;
+      }
+      list.innerHTML = state.snippets.map((snippet, index) => {
+        const selected = index === state.selectedSnippet ? "selected" : "";
+        return `
+          <article class="snippet ${selected}" data-index="${index}">
+            <div class="snippet-head">
+              <span>${escapeHtml(snippet.path)}:${snippet.start_line}-${snippet.end_line} score=${Number(snippet.score || 0).toFixed(3)}</span>
+              <div class="snippet-actions">
+                <button type="button" class="btn pin-btn" data-index="${index}">Pin</button>
+                <button type="button" class="btn inspect-btn" data-index="${index}">Inspect</button>
+              </div>
+            </div>
+            <div class="rationale">${escapeHtml(snippet.rationale || "")}</div>
+            <div class="code">${snippetLines(snippet)}</div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function renderScratchpad() {
+      const list = document.getElementById("scratchpad-list");
+      if (!state.scratchpad.length) {
+        list.innerHTML = '<li class="scratch-item">No pinned snippets.</li>';
+        return;
+      }
+      list.innerHTML = state.scratchpad.map((entry, idx) => `
+        <li class="scratch-item">
+          <div>${escapeHtml(entry.path)}:${entry.start_line}-${entry.end_line}</div>
+          <div>${escapeHtml((entry.excerpt || "").slice(0, 120))}${entry.excerpt && entry.excerpt.length > 120 ? "..." : ""}</div>
+          <button class="btn" data-scratch-remove="${idx}" type="button">Remove</button>
+        </li>
+      `).join("");
+    }
+
+    function setSnippetSelection(index) {
+      if (!state.snippets.length) {
+        state.selectedSnippet = -1;
+      } else {
+        state.selectedSnippet = Math.max(0, Math.min(index, state.snippets.length - 1));
+      }
+      renderSnippets();
+    }
+
+    function setBreadcrumb(path) {
+      state.activeInspectPath = path || "";
+      const crumb = document.getElementById("breadcrumb");
+      if (!path) {
+        crumb.textContent = "No file selected";
+        return;
+      }
+      const parts = path.split("/");
+      let built = "";
+      crumb.innerHTML = parts.map((part) => {
+        built = built ? `${built}/${part}` : part;
+        return `<span class="crumb" data-breadcrumb="${encodeURIComponent(built)}">${escapeHtml(part)}</span>`;
+      }).join(" / ");
+    }
+
+    async function inspectSlice(path, centerLine) {
+      const line = Number(centerLine || 1);
+      const start = Math.max(1, line - 50);
+      const end = line + 50;
+      try {
+        const payload = await apiPost("/api/file_slice", { path, start_line: start, end_line: end });
+        document.getElementById("inspector-meta").textContent = [
+          `${payload.path}:${payload.start_line}-${payload.end_line}`,
+          `mtime=${payload.mtime}`,
+          `bytes=${payload.size_bytes || 0}`,
+          `tokens~${payload.token_estimate || 0}`,
+          `sha=${payload.sha256}`
+        ].join(" | ");
+        document.getElementById("inspector-body").textContent = payload.excerpt || "";
+        setBreadcrumb(payload.path);
+      } catch (err) {
+        document.getElementById("inspector-meta").textContent = "Inspection failed";
+        document.getElementById("inspector-body").textContent = String(err);
+      }
+    }
+
+    async function refreshStatus(force = false) {
+      try {
+        if (document.hidden && !force) {
+          return;
+        }
+        const status = await apiGet(force ? "/api/status?force=1" : "/api/status");
+        state.status = status;
+        renderKpis(status);
+        if (state.explorer) {
+          renderFleet(state.explorer);
+        }
+      } catch (err) {
+        document.getElementById("raw-status").textContent = "Status error: " + String(err);
+      }
+    }
+
+    async function refreshExplorer() {
+      try {
+        if (document.hidden) {
+          return;
+        }
+        const explorer = await apiGet("/api/explorer");
+        state.explorer = explorer;
+        renderFleet(explorer);
+      } catch (err) {
+        document.getElementById("fleet-tree").innerHTML = `<li class="detail">Explorer error: ${escapeHtml(String(err))}</li>`;
+      }
+    }
+
+    async function refreshEventsFallback() {
+      try {
+        if (document.hidden) {
+          return;
+        }
+        const payload = await apiGet(`/api/events?limit=120&since=${state.lastEventId}`);
+        const incoming = payload.events || [];
+        if (incoming.length) {
+          state.events.push(...incoming);
+          state.events = state.events.slice(-200);
+          state.lastEventId = Number(payload.last_id || state.lastEventId);
+          renderEvents(state.events);
+          if (!state.snippets.length) {
+            const newest = incoming[incoming.length - 1];
+            if (newest && newest.id) {
+              await loadEventResult(Number(newest.id));
+            }
+          }
+        }
+      } catch (_err) {
+      }
+    }
+
+    async function loadEventResult(eventId) {
+      if (!eventId) {
+        return;
+      }
+      try {
+        const payload = await apiGet(`/api/event_result?id=${eventId}`);
+        if (!payload.available) {
+          return;
+        }
+        if (Array.isArray(payload.snippets) && payload.snippets.length) {
+          state.snippets = payload.snippets;
+          setSnippetSelection(0);
+          renderSnippets();
+          const coverage = payload.coverage || {};
+          document.getElementById("recon-meta").textContent = `files=${coverage.files_considered || 0} candidates=${coverage.candidates_scanned || 0} truncated=${Boolean(coverage.truncated)}`;
+          return;
+        }
+        if (Array.isArray(payload.hits) && payload.hits.length) {
+          state.snippets = payload.hits.map((hit, idx) => ({
+            path: hit.path,
+            start_line: hit.line,
+            end_line: hit.line,
+            excerpt: hit.text || "",
+            score: 0,
+            rationale: "code_search hit",
+            id: idx
+          }));
+          setSnippetSelection(0);
+          renderSnippets();
+          document.getElementById("recon-meta").textContent = `hits=${payload.hits.length}`;
+        }
+      } catch (_err) {
+      }
+    }
+
+    function connectEventStream() {
+      if (!window.EventSource) {
+        setInterval(refreshEventsFallback, EVENTS_FALLBACK_MS);
+        return;
+      }
+      const stream = new EventSource(`/api/events/stream?since=${state.lastEventId}`);
+      state.eventSource = stream;
+      stream.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data || "{}");
+          const incoming = payload.events || [];
+          if (incoming.length) {
+            state.events.push(...incoming);
+            state.events = state.events.slice(-200);
+            state.lastEventId = Number(payload.last_id || state.lastEventId);
+            renderEvents(state.events);
+            if (!state.snippets.length) {
+              const newest = incoming[incoming.length - 1];
+              if (newest && newest.id) {
+                loadEventResult(Number(newest.id));
+              }
+            }
+          }
+        } catch (_err) {
+        }
+      };
+      stream.onerror = () => {
+        if (state.eventSource) {
+          state.eventSource.close();
+          state.eventSource = null;
+        }
+        setTimeout(connectEventStream, 1500);
+      };
+    }
+
+    async function runRecon() {
+      const query = document.getElementById("recon-query").value;
+      const scope = parseScope(document.getElementById("recon-scope").value);
+      const maxResults = Number(document.getElementById("recon-max").value || 5);
+      const includeTests = document.getElementById("recon-tests").checked;
+      const payload = await apiPost("/api/context_recon", {
+        query,
+        scope_paths: scope,
+        max_results: maxResults,
+        include_tests: includeTests
+      });
+      state.snippets = payload.snippets || [];
+      setSnippetSelection(0);
+      renderSnippets();
+      const coverage = payload.coverage || {};
+      document.getElementById("recon-meta").textContent = `files=${coverage.files_considered || 0} candidates=${coverage.candidates_scanned || 0} truncated=${Boolean(coverage.truncated)}`;
+      await refreshExplorer();
+      await refreshStatus(false);
+    }
+
+    async function waitForReindexCompletion(maxWaitMs = 15 * 60 * 1000) {
+      const started = Date.now();
+      while ((Date.now() - started) < maxWaitMs) {
+        await sleep(1200);
+        const status = await apiGet("/api/status");
+        state.status = status;
+        renderKpis(status);
+        const reindex = status.reindex || {};
+        if (!reindex.active) {
+          if (reindex.last_error) {
+            throw new Error(reindex.last_error);
+          }
+          return reindex.last_result || {};
+        }
+        setUiFeedback("Re-index running...", "pending");
+      }
+      throw new Error("Re-index timed out waiting for completion.");
+    }
+
+    async function mutePath(path, currentlyMuted) {
+      await apiPost("/api/mute_path", { path, muted: !currentlyMuted });
+      await refreshExplorer();
+    }
+
+    function setupHandlers() {
+      const savedTheme = localStorage.getItem("context_recon_theme") || "dark";
+      applyTheme(savedTheme);
+      document.getElementById("theme-toggle").addEventListener("click", () => {
+        const light = document.documentElement.classList.contains("theme-light");
+        applyTheme(light ? "dark" : "light");
+      });
+
+      document.getElementById("recon-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const button = document.getElementById("recon-run");
+        try {
+          await runWithButtonFeedback(
+            button,
+            "Running...",
+            () => runRecon(),
+            { successText: "Query complete.", errorPrefix: "Query failed" }
+          );
+        } catch (err) {
+          document.getElementById("recon-meta").textContent = "Query error: " + String(err);
+        }
+      });
+
+      document.getElementById("reindex-btn").addEventListener("click", async () => {
+        const button = document.getElementById("reindex-btn");
+        const overlay = document.getElementById("scan-overlay");
+        overlay.classList.add("active");
+        try {
+          await runWithButtonFeedback(
+            button,
+            "Re-indexing...",
+            async () => {
+              const kickoff = await apiPost("/api/reindex", {});
+              if (!kickoff.active) {
+                throw new Error(kickoff.message || "Re-index did not start.");
+              }
+              await waitForReindexCompletion();
+              await refreshExplorer();
+              await refreshStatus(false);
+            },
+            { successText: "Re-index complete.", errorPrefix: "Re-index failed" }
+          );
+        } catch (err) {
+          document.getElementById("recon-meta").textContent = "Re-index error: " + String(err);
+        } finally {
+          setTimeout(() => overlay.classList.remove("active"), 900);
+        }
+      });
+
+      document.getElementById("refresh-status-btn").addEventListener("click", async () => {
+        const button = document.getElementById("refresh-status-btn");
+        try {
+          await runWithButtonFeedback(
+            button,
+            "Refreshing...",
+            () => refreshStatus(true),
+            { successText: "Usage refreshed.", errorPrefix: "Refresh failed" }
+          );
+        } catch (_err) {
+        }
+      });
+
+      document.getElementById("fleet-tree").addEventListener("click", async (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+        if (!target.classList.contains("muter")) {
+          return;
+        }
+        const path = decodeURIComponent(target.dataset.path || "");
+        const muted = target.dataset.muted === "1";
+        const before = target.textContent;
+        target.classList.add("busy");
+        target.setAttribute("aria-busy", "true");
+        target.textContent = muted ? "unmuting..." : "muting...";
+        setUiFeedback(`${muted ? "Unmuting" : "Muting"} ${path}...`, "pending");
+        try {
+          await mutePath(path, muted);
+          setUiFeedback(`${muted ? "Unmuted" : "Muted"} ${path}.`, "ok");
+          showToast(`${muted ? "Unmuted" : "Muted"} ${path}.`, "ok");
+        } catch (err) {
+          document.getElementById("recon-meta").textContent = "Mute toggle failed: " + String(err);
+          setUiFeedback(`Mute toggle failed: ${String(err)}`, "error");
+          showToast(`Mute toggle failed: ${String(err)}`, "error", 2600);
+        } finally {
+          target.classList.remove("busy");
+          target.removeAttribute("aria-busy");
+          target.textContent = before;
+        }
+      });
+
+      document.getElementById("top-query-chips").addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+        if (!target.classList.contains("top-query-chip")) {
+          return;
+        }
+        const query = decodeURIComponent(target.dataset.query || "");
+        if (!query) {
+          return;
+        }
+        document.getElementById("recon-query").value = query;
+        setUiFeedback(`Loaded top query: ${query}`, "ok");
+      });
+
+      document.getElementById("event-feed").addEventListener("click", async (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+        const row = target.closest(".feed-item");
+        if (!(row instanceof HTMLElement)) {
+          return;
+        }
+        const eventId = Number(row.dataset.eventId || "0");
+        if (eventId > 0) {
+          setUiFeedback(`Loading result for event #${eventId}...`, "pending");
+          await loadEventResult(eventId);
+          setUiFeedback(`Loaded result for event #${eventId}.`, "ok");
+        }
+      });
+
+      document.getElementById("snippet-list").addEventListener("click", async (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+        if (target.classList.contains("pin-btn")) {
+          const index = Number(target.dataset.index || "-1");
+          if (index >= 0 && state.snippets[index]) {
+            state.scratchpad.push(state.snippets[index]);
+            state.scratchpad = state.scratchpad.slice(-30);
+            renderScratchpad();
+          }
+          return;
+        }
+        if (target.classList.contains("inspect-btn")) {
+          const index = Number(target.dataset.index || "-1");
+          if (index >= 0 && state.snippets[index]) {
+            setSnippetSelection(index);
+            setUiFeedback(`Loading inspector for ${state.snippets[index].path}...`, "pending");
+            await inspectSlice(state.snippets[index].path, state.snippets[index].start_line);
+            setUiFeedback(`Inspector loaded for ${state.snippets[index].path}.`, "ok");
+          }
+          return;
+        }
+        if (target.classList.contains("ln")) {
+          const path = decodeURIComponent(target.dataset.path || "");
+          const line = Number(target.dataset.line || "1");
+          setUiFeedback(`Loading ${path}:${line}...`, "pending");
+          await inspectSlice(path, line);
+          setUiFeedback(`Inspector loaded for ${path}:${line}.`, "ok");
+          return;
+        }
+        const snippetCard = target.closest(".snippet");
+        if (snippetCard) {
+          const idx = Number(snippetCard.getAttribute("data-index") || "-1");
+          if (idx >= 0) {
+            setSnippetSelection(idx);
+          }
+        }
+      });
+
+      document.getElementById("scratchpad-list").addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+        const index = Number(target.dataset.scratchRemove || "-1");
+        if (index >= 0) {
+          state.scratchpad.splice(index, 1);
+          renderScratchpad();
+        }
+      });
+
+      document.getElementById("breadcrumb").addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+        const crumb = target.dataset.breadcrumb;
+        if (!crumb) {
+          return;
+        }
+        document.getElementById("recon-scope").value = decodeURIComponent(crumb);
+      });
+
+      document.addEventListener("keydown", (event) => {
+        const key = event.key.toLowerCase();
+        if ((event.metaKey || event.ctrlKey) && key === "k") {
+          event.preventDefault();
+          document.getElementById("recon-query").focus();
+          return;
+        }
+        if (key === "arrowdown") {
+          event.preventDefault();
+          setSnippetSelection(state.selectedSnippet + 1);
+          return;
+        }
+        if (key === "arrowup") {
+          event.preventDefault();
+          setSnippetSelection(state.selectedSnippet - 1);
+          return;
+        }
+        if (key === "escape") {
+          state.selectedSnippet = -1;
+          document.getElementById("inspector-meta").textContent = "";
+          document.getElementById("inspector-body").textContent = "";
+          setBreadcrumb("");
+          renderSnippets();
+        }
+      });
+
+      document.addEventListener("visibilitychange", async () => {
+        if (!document.hidden) {
+          await refreshStatus(false);
+          await refreshExplorer();
+        }
+      });
+    }
+
+    async function bootstrap() {
+      setupHandlers();
+      renderScratchpad();
+      renderEvents([]);
+      setBreadcrumb("");
+      await refreshStatus(false);
+      await refreshExplorer();
+      await refreshStatus(true);
+      connectEventStream();
+      state.explorerIntervalId = setInterval(refreshExplorer, EXPLORER_REFRESH_MS);
+      state.eventFallbackIntervalId = setInterval(() => {
+        if (!state.eventSource) {
+          refreshEventsFallback();
+        }
+      }, EVENTS_FALLBACK_MS);
+    }
+
+    window.addEventListener("beforeunload", () => {
+      if (state.eventSource) {
+        state.eventSource.close();
+        state.eventSource = null;
+      }
+      if (state.explorerIntervalId !== null) {
+        clearInterval(state.explorerIntervalId);
+        state.explorerIntervalId = null;
+      }
+      if (state.eventFallbackIntervalId !== null) {
+        clearInterval(state.eventFallbackIntervalId);
+        state.eventFallbackIntervalId = null;
+      }
+    });
+
+    bootstrap();
+  </script>
+</body>
+</html>

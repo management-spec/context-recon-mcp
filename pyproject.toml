@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "context-recon-mcp"
+version = "0.1.0"
+description = "Lightweight local MCP server for deterministic context retrieval"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastmcp>=0.3.0",
+  "watchdog>=4.0.0",
+  "PyYAML>=6.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = [
+  "server",
+  "indexer",
+  "search",
+  "excerpts",
+  "gemini",
+  "ui"
+]
+packages = ["tools", "utils"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

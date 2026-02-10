@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PYTHON_BIN="${PROJECT_ROOT}/.venv/bin/python"
+CALLER_CWD="${PWD}"
+
+if [[ ! -x "${PYTHON_BIN}" ]]; then
+  echo "Context_Recon_MCP error: missing venv python at ${PYTHON_BIN}" >&2
+  echo "Run: /opt/homebrew/bin/python3.13 -m venv ${PROJECT_ROOT}/.venv && ${PROJECT_ROOT}/.venv/bin/pip install -e '${PROJECT_ROOT}[dev]'" >&2
+  exit 1
+fi
+
+if [[ -z "${GEMINI_CONTEXT_WORKSPACE_ROOT:-}" ]]; then
+  for candidate in "${MCP_WORKSPACE_ROOT:-}" "${CODEX_WORKSPACE_ROOT:-}" "${CLAUDE_PROJECT_DIR:-}" "${CALLER_CWD}"; do
+    if [[ -n "${candidate}" && "${candidate}" != "/" ]]; then
+      export GEMINI_CONTEXT_WORKSPACE_ROOT="${candidate}"
+      break
+    fi
+  done
+fi
+export GEMINI_CONTEXT_SERVER_HOME="${PROJECT_ROOT}"
+export GEMINI_DEFAULT_AUTH_TYPE="${GEMINI_DEFAULT_AUTH_TYPE:-oauth-personal}"
+export NO_BROWSER="${NO_BROWSER:-true}"
+export OAUTH_CALLBACK_HOST="${OAUTH_CALLBACK_HOST:-127.0.0.1}"
+export CONTEXT_RECON_ORPHAN_SHUTDOWN="${CONTEXT_RECON_ORPHAN_SHUTDOWN:-false}"
+export CONTEXT_RECON_PROCESS_NAME="${CONTEXT_RECON_PROCESS_NAME:-Context_Recon_MCP}"
+
+cd "${PROJECT_ROOT}"
+exec -a "${CONTEXT_RECON_PROCESS_NAME}" "${PYTHON_BIN}" "${PROJECT_ROOT}/src/server.py"
