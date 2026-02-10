@@ -4,6 +4,7 @@
 > Built to stay simple, predictable, and inexpensive to run.
 
 We like putting our dollars where they actually count.
+
 This tool grew out of that mindset, and we’re sharing it so others can do more with less.
 
 ---
