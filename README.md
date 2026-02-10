@@ -3,7 +3,8 @@
 > **A lightweight, local MCP server for deterministic context retrieval**  
 > Built to stay simple, predictable, and inexpensive to run.
 
-We use this internally and decided to publish it as-is.
+We like putting our dollars where they actually count.
+This tool grew out of that mindset, and we’re sharing it so others can do more with less.
 
 ---
 
