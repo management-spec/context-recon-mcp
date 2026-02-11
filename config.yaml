@@ -6,7 +6,7 @@ gemini_timeout_seconds: 30
 gemini_max_output_bytes: 2097152
 gemini_planning_max_catalog_paths: 48
 gemini_planning_cache_seconds: 600
-gemini_planning_strategy: "embedded"
+gemini_planning_strategy: "gemini"
 gemini_rerank_max_candidates: 5
 gemini_rerank_excerpt_chars: 180
 gemini_rerank_prompt_char_budget: 4500

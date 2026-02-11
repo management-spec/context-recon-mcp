@@ -112,6 +112,13 @@ NO_BROWSER=true
 OAUTH_CALLBACK_HOST=127.0.0.1
 ```
 
+### Optional environment (required for some Workspace/Code Assist accounts)
+
+```bash
+GOOGLE_CLOUD_PROJECT=<your-gcp-project-id>
+GOOGLE_CLOUD_PROJECT_ID=<your-gcp-project-id>
+```
+
 Optional process label:
 
 ```bash
@@ -140,6 +147,8 @@ enabled = true
 GEMINI_DEFAULT_AUTH_TYPE = "oauth-personal"
 NO_BROWSER = "true"
 OAUTH_CALLBACK_HOST = "127.0.0.1"
+GOOGLE_CLOUD_PROJECT = "<your-gcp-project-id>"
+GOOGLE_CLOUD_PROJECT_ID = "<your-gcp-project-id>"
 ```
 
 ### Claude Code (`~/.claude.json`)
@@ -153,7 +162,9 @@ OAUTH_CALLBACK_HOST = "127.0.0.1"
     "env": {
       "GEMINI_DEFAULT_AUTH_TYPE": "oauth-personal",
       "NO_BROWSER": "true",
-      "OAUTH_CALLBACK_HOST": "127.0.0.1"
+      "OAUTH_CALLBACK_HOST": "127.0.0.1",
+      "GOOGLE_CLOUD_PROJECT": "<your-gcp-project-id>",
+      "GOOGLE_CLOUD_PROJECT_ID": "<your-gcp-project-id>"
     }
   }
 }
@@ -170,7 +181,9 @@ OAUTH_CALLBACK_HOST = "127.0.0.1"
       "env": {
         "GEMINI_DEFAULT_AUTH_TYPE": "oauth-personal",
         "NO_BROWSER": "true",
-        "OAUTH_CALLBACK_HOST": "127.0.0.1"
+        "OAUTH_CALLBACK_HOST": "127.0.0.1",
+        "GOOGLE_CLOUD_PROJECT": "<your-gcp-project-id>",
+        "GOOGLE_CLOUD_PROJECT_ID": "<your-gcp-project-id>"
       }
     }
   }
