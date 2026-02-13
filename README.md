@@ -280,7 +280,7 @@ GOOGLE_CLOUD_PROJECT_ID = "<your-gcp-project-id>"
 Defaults (when you do nothing):
 - Provider: `auto` (first available: `gemini` → `claude` → `codex`)
 - Gemini model: whatever your Gemini CLI defaults to
-- Claude model: `claude-3-7-sonnet-20250219` (via args below)
+- Claude model: `claude-3-haiku-20240307` (via args below)
 - Codex model: `codex-mini-latest`
 
 Edit `config.yaml` to pin a provider/model without env vars:
@@ -289,7 +289,7 @@ Edit `config.yaml` to pin a provider/model without env vars:
 reranker_provider: "claude"
 claude_args:
   - "--model"
-  - "claude-3-7-sonnet-20250219"
+  - "claude-3-haiku-20240307"
   - "--max-turns"
   - "1"
   - "--no-session-persistence"

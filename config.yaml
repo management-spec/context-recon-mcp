@@ -32,6 +32,8 @@ claude_command: "claude"
 claude_args:
   - "--max-turns"
   - "1"
+  - "--model"
+  - "claude-3-haiku-20240307"
   - "--no-session-persistence"
   - "--disable-slash-commands"
   - "--tools"
