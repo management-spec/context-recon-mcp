@@ -217,9 +217,6 @@ def start_dashboard(
             if parsed.path == "/api/reindex":
                 self._execute_action("reindex", payload)
                 return
-            if parsed.path == "/api/tool_update":
-                self._execute_action("tool_update", payload)
-                return
             if parsed.path == "/api/mute_path":
                 self._execute_action("mute_path", payload)
                 return

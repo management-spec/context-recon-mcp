@@ -798,7 +798,6 @@ class GeminiReranker:
             "last_request_at": "",
             "last_success_at": "",
             "last_usage_update_at": "",
-            "tokens_source": "gemini_stats",
         }
         self._plan_cache_lock = threading.Lock()
         self._plan_cache: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -922,7 +921,6 @@ class GeminiReranker:
         self._usage["gemini_tool_tokens"] += tokens["tool"]
         self._usage["last_call_tokens"] = dict(tokens)
         self._usage["last_usage_update_at"] = self._now_iso()
-        self._usage["tokens_source"] = "gemini_stats"
 
     def _build_prompt(self, query: str, candidates: list[dict], max_results: int) -> str:
         serialized = json.dumps(self._compact_candidates_for_prompt(candidates, max_results=max_results), ensure_ascii=True)
@@ -1590,9 +1588,6 @@ class GeminiReranker:
         guidance, steps = self._guidance() if not self._connected else ("Gemini CLI connected.", [])
         allow_monitor_poll = bool(force or self.config.auto_monitor_poll)
         return {
-            "provider": "gemini",
-            "command": self.config.command,
-            "args": list(self.config.args),
             "connected": self._connected,
             "checked": self._connection_checked,
             "last_error": self._last_error,

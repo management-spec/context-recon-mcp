@@ -4,7 +4,7 @@ import re
 from collections import defaultdict
 
 from excerpts import clamp_window, merge_overlapping_ranges, read_lines, slice_lines
-from reranker import Reranker
+from gemini import GeminiReranker
 from indexer import ContextIndexer
 from search import CodeSearcher
 
@@ -76,7 +76,7 @@ def _compact_snippet_excerpts(snippets: list[dict], *, max_results: int) -> tupl
 def run(
     indexer: ContextIndexer,
     searcher: CodeSearcher,
-    reranker: Reranker,
+    reranker: GeminiReranker,
     *,
     query: str,
     scope_paths: list[str] | None,
@@ -105,7 +105,7 @@ def run(
         retrieval_plan = {
             "paths": [],
             "terms": _tokenize(query),
-            "rationale": "Planner unavailable; deterministic term fallback.",
+            "rationale": "Gemini planning unavailable; deterministic term fallback.",
             "source": "deterministic_fallback",
         }
 

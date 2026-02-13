@@ -11,8 +11,7 @@ requires-python = ">=3.11"
 dependencies = [
   "fastmcp>=0.3.0",
   "watchdog>=4.0.0",
-  "PyYAML>=6.0.0",
-  "browser-cookie3>=0.20.1"
+  "PyYAML>=6.0.0"
 ]
 
 [project.optional-dependencies]
@@ -28,10 +27,6 @@ py-modules = [
   "search",
   "excerpts",
   "gemini",
-  "cli_reranker",
-  "reranker",
-  "browser_cookies",
-  "provider_usage",
   "ui"
 ]
 packages = ["tools", "utils"]
