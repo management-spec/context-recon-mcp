@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gemini import GeminiReranker
+from reranker import Reranker
 from indexer import ContextIndexer
 from search import CodeSearcher
 from tools import relevant_code
@@ -10,7 +10,7 @@ def run(
     *,
     indexer: ContextIndexer,
     searcher: CodeSearcher,
-    reranker: GeminiReranker,
+    reranker: Reranker,
     query: str | None,
     question: str | None,
     scope_paths: list[str] | None,
