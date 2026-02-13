@@ -256,7 +256,7 @@ GOOGLE_CLOUD_PROJECT_ID = "<your-gcp-project-id>"
 
 ### Optional CLI Provider Overrides (Any Host)
 
-- `CONTEXT_RECON_RERANK_PROVIDER="gemini"` (or `claude`, `codex`)
+- `CONTEXT_RECON_RERANK_PROVIDER="auto"` (or `gemini`, `claude`, `codex`)
 - `CONTEXT_RECON_GEMINI_COMMAND="gemini"`
 - `CONTEXT_RECON_GEMINI_ARGS="--model gemini-2.5-pro"`
 - `CONTEXT_RECON_CLAUDE_COMMAND="claude"`
@@ -278,7 +278,7 @@ GOOGLE_CLOUD_PROJECT_ID = "<your-gcp-project-id>"
 ### Defaults + config.yaml Examples
 
 Defaults (when you do nothing):
-- Provider: `gemini`
+- Provider: `auto` (first available: `gemini` → `claude` → `codex`)
 - Gemini model: whatever your Gemini CLI defaults to
 - Claude model: `claude-3-7-sonnet-20250219` (via args below)
 - Codex model: `codex-mini-latest`
@@ -311,6 +311,8 @@ gemini_args:
   - "--model"
   - "gemini-2.5-pro"
 ```
+
+If the chosen provider CLI is missing, the server auto-falls back to the next available CLI in the order above.
 
 Env vars always override `config.yaml`.
 

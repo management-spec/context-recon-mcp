@@ -27,7 +27,7 @@ ignore:
 database_path: ".context_engine/index.db"
 gemini_command: "gemini"
 gemini_args: []
-reranker_provider: "gemini"
+reranker_provider: "auto"
 claude_command: "claude"
 claude_args:
   - "--max-turns"
