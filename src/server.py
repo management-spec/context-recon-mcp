@@ -130,14 +130,22 @@ def _parse_env_bool(value: str) -> bool | None:
 
 
 def _run_process(command: list[str], *, cwd: Path, timeout_seconds: int) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        command,
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=max(1, int(timeout_seconds)),
-    )
+    try:
+        return subprocess.run(
+            command,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=max(1, int(timeout_seconds)),
+        )
+    except subprocess.TimeoutExpired as exc:
+        return subprocess.CompletedProcess(
+            command,
+            returncode=124,
+            stdout=(exc.stdout or ""),
+            stderr=(exc.stderr or "command timed out"),
+        )
 
 
 def update_managed_mcp_repository(

@@ -1350,12 +1350,15 @@
           const result = await runWithButtonFeedback(
             button,
             "Updating...",
-            () => apiPost("/api/tool_update", { reindex_after_update: true }),
+            async () => {
+              const payload = await apiPost("/api/tool_update", { reindex_after_update: true });
+              if (!payload || (payload.ok === false && !payload.skipped)) {
+                throw new Error((payload && (payload.message || payload.error)) || "Update failed.");
+              }
+              return payload;
+            },
             { successText: "Update check complete.", errorPrefix: "Update failed" }
           );
-          if (!result || (result.ok === false && !result.skipped)) {
-            throw new Error((result && (result.message || result.error)) || "Update failed.");
-          }
           if (result.updated) {
             if (result.reindex && result.reindex.started) {
               await waitForReindexCompletion();
