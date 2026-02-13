@@ -12,8 +12,14 @@ gemini_rerank_excerpt_chars: 180
 gemini_rerank_prompt_char_budget: 4500
 gemini_quota_poll_seconds: 1800
 gemini_auto_monitor_poll: false
-orphan_shutdown_enabled: false
+orphan_shutdown_enabled: true
 idle_shutdown_seconds: 900
+auto_update_on_start: true
+update_remote: "origin"
+update_branch: ""
+update_allow_dirty: false
+update_timeout_seconds: 45
+update_poll_seconds: 300
 ignore:
   - ".git/"
   - "node_modules/"
@@ -21,6 +27,27 @@ ignore:
 database_path: ".context_engine/index.db"
 gemini_command: "gemini"
 gemini_args: []
+reranker_provider: "gemini"
+claude_command: "claude"
+claude_args:
+  - "--max-turns"
+  - "1"
+  - "--no-session-persistence"
+  - "--disable-slash-commands"
+  - "--tools"
+  - ""
+claude_prompt_mode: "arg"
+claude_usage_source: "auto"
+claude_cookie_source: "auto"
+claude_cookie_header: ""
+codex_command: "codex"
+codex_args:
+  - "-m"
+  - "codex-mini-latest"
+codex_prompt_mode: "arg"
+codex_usage_source: "auto"
+codex_cookie_source: "auto"
+codex_cookie_header: ""
 ide_context_sync:
   enabled: true
 ui:
