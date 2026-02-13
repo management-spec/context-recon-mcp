@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from server import ContextEngine, cleanup_managed_mcp_servers, cleanup_orphaned_mcp_servers
+from server import ContextEngine, cleanup_managed_mcp_servers, cleanup_orphaned_mcp_servers, update_managed_mcp_repository
 
 
 def _engine_stub() -> ContextEngine:
@@ -77,3 +77,77 @@ def test_cleanup_orphaned_mcp_servers_filters_non_orphans(monkeypatch) -> None:
 
     assert killed_count == 1
     assert killed == [201]
+
+
+def test_update_managed_mcp_repository_pulls_when_clean(monkeypatch, tmp_path) -> None:
+    head_values = iter(
+        [
+            "1111111111111111111111111111111111111111\n",
+            "2222222222222222222222222222222222222222\n",
+        ]
+    )
+    seen_commands: list[list[str]] = []
+
+    def fake_run(command, *args, **kwargs):
+        cmd = list(command)
+        seen_commands.append(cmd)
+        if cmd[:2] == ["git", "--version"]:
+            return SimpleNamespace(returncode=0, stdout="git version 2.42.0\n", stderr="")
+        if cmd[:3] == ["git", "rev-parse", "--is-inside-work-tree"]:
+            return SimpleNamespace(returncode=0, stdout="true\n", stderr="")
+        if cmd[:3] == ["git", "status", "--porcelain"]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd[:3] == ["git", "rev-parse", "HEAD"]:
+            return SimpleNamespace(returncode=0, stdout=next(head_values), stderr="")
+        if cmd[:3] == ["git", "pull", "--ff-only"]:
+            return SimpleNamespace(returncode=0, stdout="Updating 1111111..2222222\n", stderr="")
+        if cmd[:3] == ["git", "diff", "--name-only"]:
+            return SimpleNamespace(returncode=0, stdout="src/server.py\nREADME.md\n", stderr="")
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr("server.subprocess.run", fake_run)
+
+    result = update_managed_mcp_repository(
+        repo_root=tmp_path,
+        remote="origin",
+        branch="main",
+        allow_dirty=False,
+        timeout_seconds=45,
+    )
+
+    assert result["ok"] is True
+    assert result["updated"] is True
+    assert result["branch"] == "main"
+    assert result["changed_files_count"] == 2
+    assert result["changed_files"] == ["src/server.py", "README.md"]
+    assert any(cmd[:3] == ["git", "pull", "--ff-only"] for cmd in seen_commands)
+
+
+def test_update_managed_mcp_repository_skips_dirty_worktree(monkeypatch, tmp_path) -> None:
+    seen_commands: list[list[str]] = []
+
+    def fake_run(command, *args, **kwargs):
+        cmd = list(command)
+        seen_commands.append(cmd)
+        if cmd[:2] == ["git", "--version"]:
+            return SimpleNamespace(returncode=0, stdout="git version 2.42.0\n", stderr="")
+        if cmd[:3] == ["git", "rev-parse", "--is-inside-work-tree"]:
+            return SimpleNamespace(returncode=0, stdout="true\n", stderr="")
+        if cmd[:3] == ["git", "status", "--porcelain"]:
+            return SimpleNamespace(returncode=0, stdout=" M src/server.py\n", stderr="")
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    monkeypatch.setattr("server.subprocess.run", fake_run)
+
+    result = update_managed_mcp_repository(
+        repo_root=tmp_path,
+        remote="origin",
+        branch="main",
+        allow_dirty=False,
+        timeout_seconds=45,
+    )
+
+    assert result["ok"] is False
+    assert result["skipped"] is True
+    assert result["error"] == "dirty_worktree"
+    assert all(cmd[:3] != ["git", "pull", "--ff-only"] for cmd in seen_commands)
