@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from gemini import GeminiReranker
+from reranker import Reranker
 from indexer import ContextIndexer
 from search import CodeSearcher
 
@@ -27,7 +27,7 @@ def _tokenize_pattern(pattern: str, max_terms: int = 4) -> list[str]:
 def run(
     searcher: CodeSearcher,
     indexer: ContextIndexer,
-    reranker: GeminiReranker,
+    reranker: Reranker,
     *,
     pattern: str,
     regex: bool,
@@ -59,7 +59,7 @@ def run(
         retrieval_plan = {
             "paths": [],
             "terms": [pattern],
-            "rationale": "Gemini planning unavailable; deterministic pattern fallback.",
+            "rationale": "Planner unavailable; deterministic pattern fallback.",
             "source": "deterministic_fallback",
         }
     planned_paths = {

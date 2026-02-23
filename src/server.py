@@ -19,7 +19,7 @@ from typing import Any
 import yaml
 from fastmcp import FastMCP
 
-from gemini import GeminiConfig, GeminiReranker
+from reranker import build_reranker
 from indexer import ContextIndexer
 from search import CodeSearcher
 from tools import code_search, context_recon, file_slice, index_inspection, project_overview, relevant_code
@@ -112,6 +112,238 @@ def cleanup_orphaned_mcp_servers(current_pid: int) -> int:
     return int(result.get("killed", 0))
 
 
+def _trim_text(value: str, *, limit: int = 1200) -> str:
+    text = value.strip()
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 3)] + "..."
+
+
+def _parse_env_bool(value: str) -> bool | None:
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
+
+def _run_process(command: list[str], *, cwd: Path, timeout_seconds: int) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            command,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=max(1, int(timeout_seconds)),
+        )
+    except subprocess.TimeoutExpired as exc:
+        return subprocess.CompletedProcess(
+            command,
+            returncode=124,
+            stdout=(exc.stdout or ""),
+            stderr=(exc.stderr or "command timed out"),
+        )
+
+
+def update_managed_mcp_repository(
+    *,
+    repo_root: Path,
+    remote: str,
+    branch: str,
+    allow_dirty: bool,
+    timeout_seconds: int,
+) -> dict[str, Any]:
+    resolved_root = repo_root.resolve()
+    remote_name = remote.strip() or "origin"
+    requested_branch = branch.strip()
+    timeout_seconds = max(5, int(timeout_seconds))
+    response: dict[str, Any] = {
+        "ok": False,
+        "skipped": False,
+        "updated": False,
+        "repo_root": str(resolved_root),
+        "remote": remote_name,
+        "branch": requested_branch,
+        "allow_dirty": bool(allow_dirty),
+        "timeout_seconds": timeout_seconds,
+        "before_sha": "",
+        "after_sha": "",
+        "changed_files": [],
+        "changed_files_count": 0,
+        "pull_stdout": "",
+        "pull_stderr": "",
+    }
+
+    if not resolved_root.exists():
+        response.update(
+            {
+                "error": "repo_root_missing",
+                "message": f"Repository path does not exist: {resolved_root}",
+            }
+        )
+        return response
+
+    try:
+        git_version = subprocess.run(
+            ["git", "--version"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout_seconds,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        response.update({"error": "git_unavailable", "message": str(exc)})
+        return response
+    if git_version.returncode != 0:
+        response.update(
+            {
+                "error": "git_unavailable",
+                "message": _trim_text(git_version.stderr or git_version.stdout or "git --version failed"),
+            }
+        )
+        return response
+
+    try:
+        inside_repo = _run_process(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=resolved_root,
+            timeout_seconds=timeout_seconds,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        response.update({"error": "git_repo_check_failed", "message": str(exc)})
+        return response
+    if inside_repo.returncode != 0 or inside_repo.stdout.strip().lower() != "true":
+        response.update(
+            {
+                "error": "not_git_repo",
+                "message": _trim_text(inside_repo.stderr or inside_repo.stdout or "Path is not a git repository"),
+            }
+        )
+        return response
+
+    if not allow_dirty:
+        status = _run_process(
+            ["git", "status", "--porcelain"],
+            cwd=resolved_root,
+            timeout_seconds=timeout_seconds,
+        )
+        if status.returncode != 0:
+            response.update(
+                {
+                    "error": "git_status_failed",
+                    "message": _trim_text(status.stderr or status.stdout or "git status failed"),
+                }
+            )
+            return response
+        dirty_lines = [line for line in status.stdout.splitlines() if line.strip()]
+        if dirty_lines:
+            response.update(
+                {
+                    "error": "dirty_worktree",
+                    "message": "Local changes detected; skipping update.",
+                    "skipped": True,
+                    "dirty_file_count": len(dirty_lines),
+                }
+            )
+            return response
+
+    target_branch = requested_branch
+    if not target_branch:
+        current_branch = _run_process(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=resolved_root,
+            timeout_seconds=timeout_seconds,
+        )
+        if current_branch.returncode != 0:
+            response.update(
+                {
+                    "error": "git_branch_detect_failed",
+                    "message": _trim_text(current_branch.stderr or current_branch.stdout or "Unable to detect branch"),
+                }
+            )
+            return response
+        detected = current_branch.stdout.strip()
+        if not detected or detected == "HEAD":
+            response.update(
+                {
+                    "error": "detached_head_requires_branch",
+                    "message": "Detached HEAD detected; provide an explicit branch to update.",
+                }
+            )
+            return response
+        target_branch = detected
+        response["branch"] = target_branch
+
+    before_sha_proc = _run_process(
+        ["git", "rev-parse", "HEAD"],
+        cwd=resolved_root,
+        timeout_seconds=timeout_seconds,
+    )
+    if before_sha_proc.returncode != 0:
+        response.update(
+            {
+                "error": "git_rev_parse_failed",
+                "message": _trim_text(before_sha_proc.stderr or before_sha_proc.stdout or "Unable to resolve HEAD"),
+            }
+        )
+        return response
+    before_sha = before_sha_proc.stdout.strip()
+    response["before_sha"] = before_sha
+
+    pull_result = _run_process(
+        ["git", "pull", "--ff-only", remote_name, target_branch],
+        cwd=resolved_root,
+        timeout_seconds=timeout_seconds,
+    )
+    response["pull_stdout"] = _trim_text(pull_result.stdout)
+    response["pull_stderr"] = _trim_text(pull_result.stderr)
+    if pull_result.returncode != 0:
+        response.update(
+            {
+                "error": "git_pull_failed",
+                "message": _trim_text(pull_result.stderr or pull_result.stdout or "git pull failed"),
+            }
+        )
+        return response
+
+    after_sha_proc = _run_process(
+        ["git", "rev-parse", "HEAD"],
+        cwd=resolved_root,
+        timeout_seconds=timeout_seconds,
+    )
+    if after_sha_proc.returncode != 0:
+        response.update(
+            {
+                "error": "git_rev_parse_failed",
+                "message": _trim_text(after_sha_proc.stderr or after_sha_proc.stdout or "Unable to resolve updated HEAD"),
+            }
+        )
+        return response
+    after_sha = after_sha_proc.stdout.strip()
+    response["after_sha"] = after_sha
+
+    updated = bool(before_sha and after_sha and before_sha != after_sha)
+    response["updated"] = updated
+
+    if updated:
+        changed_proc = _run_process(
+            ["git", "diff", "--name-only", f"{before_sha}..{after_sha}"],
+            cwd=resolved_root,
+            timeout_seconds=timeout_seconds,
+        )
+        if changed_proc.returncode == 0:
+            files = [line.strip() for line in changed_proc.stdout.splitlines() if line.strip()]
+            response["changed_files"] = files[:100]
+            response["changed_files_count"] = len(files)
+
+    response["ok"] = True
+    response["message"] = "Update applied." if updated else "Already up to date."
+    return response
+
+
 class ContextEngine:
     def __init__(self, workspace_root: Path, config: dict[str, Any], server_home: Path | None = None) -> None:
         self.workspace_root = workspace_root.resolve()
@@ -132,21 +364,10 @@ class ContextEngine:
             ignore_patterns=config.get("ignore", []),
         )
         self.searcher = CodeSearcher(self.indexer)
-        self.reranker = GeminiReranker(
-            GeminiConfig(
-                command=config.get("gemini_command", "gemini"),
-                args=list(config.get("gemini_args", [])),
-                timeout_seconds=self.gemini_timeout_seconds,
-                max_output_bytes=gemini_max_output_bytes,
-                quota_poll_seconds=int(config.get("gemini_quota_poll_seconds", 1800)),
-                auto_monitor_poll=bool(config.get("gemini_auto_monitor_poll", False)),
-                planning_max_catalog_paths=int(config.get("gemini_planning_max_catalog_paths", 48)),
-                planning_cache_seconds=int(config.get("gemini_planning_cache_seconds", 600)),
-                planning_strategy=str(config.get("gemini_planning_strategy", "embedded")),
-                rerank_max_candidates=int(config.get("gemini_rerank_max_candidates", 8)),
-                rerank_excerpt_chars=int(config.get("gemini_rerank_excerpt_chars", 280)),
-                rerank_prompt_char_budget=int(config.get("gemini_rerank_prompt_char_budget", 9000)),
-            )
+        self.reranker = build_reranker(
+            config=config,
+            timeout_seconds=self.gemini_timeout_seconds,
+            max_output_bytes=gemini_max_output_bytes,
         )
         ide_context_config = config.get("ide_context_sync", {})
         if not isinstance(ide_context_config, dict):
@@ -189,7 +410,46 @@ class ContextEngine:
         else:
             self._orphan_shutdown_enabled = orphan_default
         self._idle_shutdown_seconds = max(0, int(config.get("idle_shutdown_seconds", 900)))
+
+        self._update_remote = str(config.get("update_remote", "origin")).strip() or "origin"
+        update_branch_raw = config.get("update_branch", "")
+        self._update_branch = str(update_branch_raw).strip() if update_branch_raw is not None else ""
+        self._update_allow_dirty = bool(config.get("update_allow_dirty", False))
+        self._update_timeout_seconds = max(5, int(config.get("update_timeout_seconds", 45)))
+        self._update_poll_seconds = max(0, int(config.get("update_poll_seconds", 0)))
+        self._auto_update_on_start = bool(config.get("auto_update_on_start", False))
+
+        update_remote_env = os.environ.get("CONTEXT_RECON_UPDATE_REMOTE", "").strip()
+        if update_remote_env:
+            self._update_remote = update_remote_env
+
+        update_branch_env = os.environ.get("CONTEXT_RECON_UPDATE_BRANCH", "").strip()
+        if update_branch_env:
+            self._update_branch = update_branch_env
+
+        update_allow_dirty_env = _parse_env_bool(os.environ.get("CONTEXT_RECON_UPDATE_ALLOW_DIRTY", ""))
+        if update_allow_dirty_env is not None:
+            self._update_allow_dirty = update_allow_dirty_env
+
+        auto_update_env = _parse_env_bool(os.environ.get("CONTEXT_RECON_AUTO_UPDATE_ON_START", ""))
+        if auto_update_env is not None:
+            self._auto_update_on_start = auto_update_env
+
+        update_timeout_env = os.environ.get("CONTEXT_RECON_UPDATE_TIMEOUT_SECONDS", "").strip()
+        if update_timeout_env:
+            try:
+                self._update_timeout_seconds = max(5, int(update_timeout_env))
+            except ValueError:
+                pass
+        update_poll_env = os.environ.get("CONTEXT_RECON_UPDATE_POLL_SECONDS", "").strip()
+        if update_poll_env:
+            try:
+                self._update_poll_seconds = max(0, int(update_poll_env))
+            except ValueError:
+                pass
+
         self._last_activity_monotonic = time.monotonic()
+        self._next_auto_update_monotonic = 0.0
         self._activity_touch_lock = threading.Lock()
         self._shutdown_event = threading.Event()
         self._stop_lock = threading.Lock()
@@ -239,6 +499,17 @@ class ContextEngine:
 
     def start(self) -> None:
         self._touch_activity()
+        if self._auto_update_on_start:
+            update_result = self.run_tool_update(source="startup", reindex_after_update=False, touch_activity=False)
+            if not update_result.get("ok", False):
+                update_error = str(update_result.get("error", ""))
+                update_message = str(update_result.get("message", "unknown error"))
+                if update_error in {"dirty_worktree", "not_git_repo"}:
+                    LOG.info("Auto update skipped: %s", update_message)
+                else:
+                    LOG.warning("Auto update skipped/failed: %s", update_message)
+        if self._update_poll_seconds > 0:
+            self._next_auto_update_monotonic = time.monotonic() + float(self._update_poll_seconds)
         self._start_initial_scan()
         threading.Thread(target=self.indexer.start_watching, daemon=True).start()
         if self._orphan_shutdown_enabled:
@@ -262,6 +533,7 @@ class ContextEngine:
                         "file_slice": self.ui_file_slice,
                         "reindex": self.ui_reindex,
                         "tool_cleanup": self.ui_tool_cleanup,
+                        "tool_update": self.ui_tool_update,
                         "mute_path": self.ui_mute_path,
                     },
                 )
@@ -322,6 +594,18 @@ class ContextEngine:
                 self._shutdown_process("parent exited (orphan process)")
             if self._idle_shutdown_seconds > 0 and idle_for >= self._idle_shutdown_seconds:
                 self._shutdown_process(f"idle timeout reached ({int(idle_for)}s)")
+            if self._update_poll_seconds > 0 and now >= self._next_auto_update_monotonic:
+                self._next_auto_update_monotonic = now + float(self._update_poll_seconds)
+                update_result = self.run_tool_update(source="auto-poll", reindex_after_update=False, touch_activity=False)
+                if update_result.get("ok") and update_result.get("updated"):
+                    LOG.info("Auto update poll applied changes at %s", str(update_result.get("after_sha", ""))[:8])
+                elif not update_result.get("ok"):
+                    update_error = str(update_result.get("error", ""))
+                    update_message = str(update_result.get("message", "unknown error"))
+                    if update_error in {"dirty_worktree", "not_git_repo"}:
+                        LOG.info("Auto update poll skipped: %s", update_message)
+                    else:
+                        LOG.warning("Auto update poll failed: %s", update_message)
 
     def dashboard_status(self, force: bool = False) -> dict[str, Any]:
         self._touch_activity()
@@ -758,6 +1042,68 @@ class ContextEngine:
         )
         return result
 
+    def run_tool_update(
+        self,
+        *,
+        source: str,
+        remote: str | None = None,
+        branch: str | None = None,
+        allow_dirty: bool | None = None,
+        reindex_after_update: bool = False,
+        touch_activity: bool = True,
+    ) -> dict:
+        if touch_activity:
+            self._touch_activity()
+        started = time.perf_counter()
+        effective_remote = (remote or self._update_remote or "origin").strip() or "origin"
+        configured_branch = self._update_branch if branch is None else str(branch).strip()
+        effective_allow_dirty = self._update_allow_dirty if allow_dirty is None else bool(allow_dirty)
+
+        result = update_managed_mcp_repository(
+            repo_root=self.server_home,
+            remote=effective_remote,
+            branch=configured_branch,
+            allow_dirty=effective_allow_dirty,
+            timeout_seconds=self._update_timeout_seconds,
+        )
+
+        reindex_payload: dict[str, Any] = {"started": False, "active": False}
+        if result.get("ok") and result.get("updated") and reindex_after_update:
+            reindex_payload = self.start_reindex(source=source)
+        result["reindex"] = reindex_payload
+        result["restart_recommended"] = bool(result.get("updated"))
+
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        if result.get("ok"):
+            if result.get("updated"):
+                summary = "Server repository updated"
+            else:
+                summary = "Server repository already up to date"
+            status = "ok"
+        else:
+            if result.get("skipped"):
+                summary = f"tool_update skipped: {result.get('message', 'skipped')}"
+                status = "ok"
+            else:
+                summary = f"tool_update failed: {result.get('message', 'unknown error')}"
+                status = "error"
+        self._record_activity(
+            tool="context.tool_update",
+            source=source,
+            status=status,
+            summary=summary,
+            meta={
+                "duration_ms": duration_ms,
+                "remote": effective_remote,
+                "branch": result.get("branch", ""),
+                "updated": bool(result.get("updated", False)),
+                "skipped": bool(result.get("skipped", False)),
+                "reindex_after_update": reindex_after_update,
+                "reindex_started": bool(reindex_payload.get("started", False)),
+            },
+        )
+        return result
+
     def _run_reindex_background(self, *, source: str) -> None:
         self._touch_activity()
         started = time.perf_counter()
@@ -977,6 +1323,31 @@ class ContextEngine:
         orphan_only = bool(payload.get("orphan_only", False))
         return self.run_tool_cleanup(source="dashboard", orphan_only=orphan_only)
 
+    def ui_tool_update(self, payload: dict[str, Any]) -> dict:
+        remote_raw = payload.get("remote")
+        branch_raw = payload.get("branch")
+        remote = str(remote_raw).strip() if isinstance(remote_raw, str) else None
+        branch = str(branch_raw).strip() if isinstance(branch_raw, str) else None
+        allow_dirty_raw = payload.get("allow_dirty")
+        allow_dirty: bool | None = None
+        if isinstance(allow_dirty_raw, bool):
+            allow_dirty = allow_dirty_raw
+        elif isinstance(allow_dirty_raw, str):
+            parsed = _parse_env_bool(allow_dirty_raw)
+            if parsed is None:
+                raise ValueError("`allow_dirty` must be a boolean")
+            allow_dirty = parsed
+        elif allow_dirty_raw is not None:
+            raise ValueError("`allow_dirty` must be a boolean")
+        reindex_after_update = bool(payload.get("reindex_after_update", True))
+        return self.run_tool_update(
+            source="dashboard",
+            remote=remote,
+            branch=branch,
+            allow_dirty=allow_dirty,
+            reindex_after_update=reindex_after_update,
+        )
+
     def ui_mute_path(self, payload: dict[str, Any]) -> dict:
         self._touch_activity()
         raw_path = str(payload.get("path", "")).strip()
@@ -1098,6 +1469,15 @@ def build_mcp(engine: ContextEngine) -> FastMCP:
             "url": f"http://{engine.ui_host}:{engine.ui_port}" if engine.ui_enabled else "",
             "auto_open": engine.ui_auto_open,
         }
+        payload["update"] = {
+            "auto_update_on_start": engine._auto_update_on_start,
+            "poll_seconds": engine._update_poll_seconds,
+            "remote": engine._update_remote,
+            "branch": engine._update_branch,
+            "allow_dirty": engine._update_allow_dirty,
+            "timeout_seconds": engine._update_timeout_seconds,
+            "repo_root": str(engine.server_home),
+        }
         engine._record_activity(
             tool="context.index_inspection",
             source="mcp",
@@ -1171,6 +1551,21 @@ def build_mcp(engine: ContextEngine) -> FastMCP:
     @mcp.tool(name="context.tool_cleanup")
     def tool_tool_cleanup(orphan_only: bool = False) -> dict:
         return engine.run_tool_cleanup(source="mcp", orphan_only=orphan_only)
+
+    @mcp.tool(name="context.tool_update")
+    def tool_tool_update(
+        remote: str | None = None,
+        branch: str | None = None,
+        allow_dirty: bool | None = None,
+        reindex_after_update: bool = False,
+    ) -> dict:
+        return engine.run_tool_update(
+            source="mcp",
+            remote=remote,
+            branch=branch,
+            allow_dirty=allow_dirty,
+            reindex_after_update=reindex_after_update,
+        )
 
     return mcp
 
