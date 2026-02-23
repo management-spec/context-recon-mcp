@@ -791,8 +791,10 @@
       const connected = !!gemini.connected;
       const providerRaw = String(gemini.provider || "Gemini");
       const providerName = providerRaw ? providerRaw[0].toUpperCase() + providerRaw.slice(1) : "Gemini";
-      const isGemini = providerRaw.toLowerCase() === "gemini";
-      const monitorAvailable = isGemini && Boolean(quota.available || cliStats.available);
+      const provider = providerRaw.toLowerCase();
+      const geminiMonitorAvailable = provider === "gemini" && Boolean(quota.available || cliStats.available);
+      const externalMonitorAvailable = provider !== "gemini" && Boolean(externalUsage.available);
+      const monitorAvailable = geminiMonitorAvailable || externalMonitorAvailable;
       const label = document.getElementById("kpi-connection-label");
       if (label) {
         label.textContent = `${providerName} Connection`;
@@ -803,7 +805,12 @@
         connectedEl.className = "value status-ok";
         document.getElementById("kpi-guidance").textContent = gemini.guidance || `${providerName} CLI connected.`;
       } else if (monitorAvailable) {
-        const source = cliStats.available ? "/stats" : "oauth-api";
+        let source = "";
+        if (provider === "gemini") {
+          source = cliStats.available ? "/stats" : "oauth-api";
+        } else {
+          source = String(externalUsage.source || "oauth-api");
+        }
         connectedEl.textContent = "Auth Ready";
         connectedEl.className = "value status-ok";
         document.getElementById("kpi-guidance").textContent = `${providerName} monitor connected (${source}). Run Query to validate reranker connection.`;
