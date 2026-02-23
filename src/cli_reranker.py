@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from utils.json_schema import validate_gemini_rerank_payload
+from utils.rationale import build_factual_plan_rationale, build_factual_rerank_rationale
 from provider_usage import (
     fetch_claude_oauth_usage,
     fetch_claude_web_usage,
@@ -308,6 +309,7 @@ class BaseCliReranker:
             "Rank local code excerpts for relevance.\n"
             "Return JSON only using: {\"snippets\": [{\"id\": int, \"score\": float, \"rationale\": string}]}.\n"
             "Use only provided candidates. Do not invent code or files.\n"
+            "Keep rationale concise, factual, and grounded only in provided query/candidate text.\n"
             "Candidate keys: i=id, p=path_tail, b=base_score, e=excerpt.\n"
             "Set snippets[].id equal to candidate i.\n"
             f"Limit to at most {max_results} snippets.\n"
@@ -416,6 +418,7 @@ class BaseCliReranker:
             "Plan code retrieval for a local context engine.\n"
             "Return JSON only: {\"paths\": [string], \"terms\": [string], \"rationale\": string}.\n"
             "Use only provided catalog paths. No invented paths.\n"
+            "Keep rationale concise, factual, and based only on provided hints/query/catalog.\n"
             f"Tool: {tool_name}\n"
             f"Limit paths to at most {max_paths} and terms to at most {max_terms}.\n"
             f"Query terms: {query}\n"
@@ -933,7 +936,6 @@ class BaseCliReranker:
             payload = self._parse_cli_output(stdout)
             raw_paths = payload.get("paths", [])
             raw_terms = payload.get("terms", [])
-            raw_rationale = payload.get("rationale", "")
             if not isinstance(raw_paths, list) or not isinstance(raw_terms, list):
                 raise ValueError("invalid_json_from_cli")
             self._apply_usage(prompt=prompt, stdout=stdout, payload=payload)
@@ -982,11 +984,13 @@ class BaseCliReranker:
         if not selected_terms:
             selected_terms = fallback_terms
 
-        rationale = raw_rationale.strip() if isinstance(raw_rationale, str) else ""
         plan = {
             "paths": selected_paths,
             "terms": selected_terms,
-            "rationale": rationale or "CLI retrieval plan generated.",
+            "rationale": build_factual_plan_rationale(
+                selected_paths=selected_paths,
+                selected_terms=selected_terms,
+            ),
             "source": self.config.provider,
         }
         with self._plan_cache_lock:
@@ -1040,15 +1044,29 @@ class BaseCliReranker:
             self._usage["fallback_total"] += 1
             return self._deterministic_fallback(candidates, max_results)
 
-        candidate_ids = {item["id"] for item in candidates}
+        candidate_map = {int(item["id"]): item for item in candidates}
+        candidate_ids = set(candidate_map.keys())
         seen: set[int] = set()
         filtered: list[dict] = []
         for item in normalized:
             cid = item["id"]
             if cid not in candidate_ids or cid in seen:
                 continue
+            candidate = candidate_map.get(cid)
+            if candidate is None:
+                continue
             seen.add(cid)
-            filtered.append(item)
+            filtered.append(
+                {
+                    "id": cid,
+                    "score": float(item["score"]),
+                    "rationale": build_factual_rerank_rationale(
+                        query=query,
+                        excerpt=str(candidate.get("excerpt", "")),
+                        path=str(candidate.get("path", "")),
+                    ),
+                }
+            )
             if len(filtered) >= max_results:
                 break
 
