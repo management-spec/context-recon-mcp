@@ -367,3 +367,80 @@ def test_plan_retrieval_resolves_extensionless_symbol_hint() -> None:
     )
     assert plan["source"] == "embedded_hints"
     assert "AIStageCoach/UI/MultiLaneTimelineView.swift" in plan["paths"]
+
+
+def test_rerank_overrides_model_rationale_with_factual_text(monkeypatch) -> None:
+    reranker = GeminiReranker(
+        GeminiConfig(
+            command="gemini",
+            args=[],
+            timeout_seconds=5,
+            max_output_bytes=1024 * 1024,
+            quota_poll_seconds=300,
+        )
+    )
+    reranker._connected = True
+
+    def fake_execute(_prompt: str):
+        payload = {
+            "snippets": [
+                {
+                    "id": 7,
+                    "score": 0.88,
+                    "rationale": "This calls an external billing API and checks Stripe webhook signatures.",
+                }
+            ]
+        }
+        return 0, json.dumps(payload), ""
+
+    monkeypatch.setattr(reranker, "_execute", fake_execute)
+    results = reranker.rerank(
+        query="validate invoice",
+        candidates=[
+            {
+                "id": 7,
+                "path": "src/billing/invoice_validator.py",
+                "start_line": 1,
+                "end_line": 20,
+                "excerpt": "def validate_invoice(invoice):\n    return bool(invoice)\n",
+                "base_score": 1.0,
+            }
+        ],
+        max_results=1,
+    )
+    assert results
+    assert "stripe" not in results[0]["rationale"].lower()
+    assert "invoice" in results[0]["rationale"].lower()
+
+
+def test_plan_retrieval_overrides_model_rationale_with_factual_text(monkeypatch) -> None:
+    reranker = GeminiReranker(
+        GeminiConfig(
+            command="gemini",
+            args=[],
+            timeout_seconds=5,
+            max_output_bytes=1024 * 1024,
+            quota_poll_seconds=300,
+            planning_strategy="gemini",
+        )
+    )
+    reranker._connected = True
+
+    def fake_execute(_prompt: str):
+        payload = {
+            "paths": ["src/auth.py"],
+            "terms": ["token", "refresh"],
+            "rationale": "This path handles OAuth handshakes with external redirect flows and SSO.",
+        }
+        return 0, json.dumps(payload), ""
+
+    monkeypatch.setattr(reranker, "_execute", fake_execute)
+    plan = reranker.plan_retrieval(
+        query="refresh token",
+        available_paths=["src/auth.py", "src/cache.py"],
+        max_paths=3,
+        max_terms=3,
+    )
+    assert plan["source"] == "gemini"
+    assert "oauth handshakes" not in plan["rationale"].lower()
+    assert plan["rationale"].lower().startswith("selected")
